@@ -37,3 +37,7 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Overlarge Data Files
+Original_Data/EJSCREEN_Full_tracts.txt
+Original_Data/tract2010_LifeExpectancy.txt
