@@ -1,0 +1,233 @@
+---
+title: "Mapping Demographic Indexes for the Casco Bay Watershed"
+uthor: "Curtis C. Bohlen, Casco Bay Estuary Partnership"
+date: "July 27, 2022"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+---
+
+<img
+    src="https://www.cascobayestuary.org/wp-content/uploads/2014/04/logo_sm.jpg"
+    style="position:absolute;top:100px;right:50px;" />
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align = 'center',
+                      fig.width = 5, fig.height = 4,
+                      collapse = TRUE, comment = "#>")
+```
+
+# Introduction
+CBEP, like other National Estuary Programs will receive additional funding to
+support our programs via the "Bipartisan Infrastructure Law" signed into law 
+last December.
+
+EPA has recently released guidance for applying for those funds.  A core 
+component of the guidance is that overall, the NEP program should comply with 
+the White House's "Justice 40" initiative, which requires that "at least 40% of 
+the benefits and investments from BIL funding flow to disadvantaged 
+communities."
+
+EPA suggested that we use the National-scale 
+[EJSCREEN tools](https://www.epa.gov/ejscreen) to help identify "disadvantaged
+communities" in our region. The EPA guidance goes on to suggest we focus on 
+five demographic indicators:
+
+*  Percent low-income;  
+
+*  Percent linguistically isolated; 
+
+*  Percent less than high school education;  
+
+*  Percent unemployed; and  
+
+*  Low life expectancy.
+
+This notebook builds on the work in "Calc_Indexes.pdf" to calculate data for the
+Casco Bay Watershed Census Tracts, and calculates how Casco Bay Census tracts
+compare at National, Statewide, and Regional scales.
+
+# Load Libraries
+```{r libraries}
+library(tidyverse)
+library(GGally)
+library(readr)
+library(rgdal)
+library(sf)   # automatically loads `sp` and `rgdal`
+library(broom)  # used to tidy geospatial info to dataframe for ggplot (could use fortify())
+#library(rgeos)
+```
+
+# Set Graphics Theme
+This sets `ggplot()`graphics for no background, no grid lines, etc. in a clean
+format suitable for (some) publications.
+
+```{r set_theme}
+theme_set(theme_classic())
+```
+
+# Load Data
+## Folder References
+I use folder references to allow limited indirection, thus making code from 
+GitHub repositories more likely to run "out of the box".  
+
+```{r folder_refs}
+data_folder <- "Original_Data"
+gis_folder <- "GIS_Data"
+dir.create(file.path(getwd(), 'figures'), showWarnings = FALSE)
+```
+
+I use the "Original_Data" folder to retain data in the form originally
+downloaded.  That minimizes the chances of inadvertently modifying the source 
+data. All data was accessed via EJScreen.  The 2021 EJSCREEN Data
+was accessed on July 26, 2022, at https://gaftp.epa.gov/EJSCREEN/2021/.  I 
+downloaded geodatabases, and open the geospatial data they contained in ArcGIS
+and exported the tabular attribute data to CSV files.  That tabular CSV data is 
+provided in the "Original Data" folder here.
+
+The "figures" folder isolates "final" versions of any graphics I produce.  That
+just makes it a bit easier to find  final products in what can sometimes be 
+fairly large GitHub Repositories (although not here).
+
+## Tabular Data
+The Tabular data is quite extensive (over 165 MB), which poses some data access
+challenges.  The raw CSV file contains 74001 records, and 166 columns.  Most,
+but not all are numeric.  The Health data is slightly smaller in length, and has 
+only a handful of relevant data columns, but it DOES include State ad County 
+names, which are more convenient that the GEOID10 values to search.
+
+```{r}
+cb_data <- read_csv("cb_tracts_indexes.csv",    
+                     col_types = paste0('ccddd--', rep('d', 41)))
+```
+
+## Geospatial Data
+We have geospatial data, in UTM coordinates.
+
+```{r}
+the_file_name <- 'casco_ejscreen_utm.shp' 
+the_path <- file.path(gis_folder, the_file_name)
+cb_geospatial <- readOGR(the_path )
+
+the_file_name <- 'casco_watershed_utm.shp' 
+the_path <- file.path(gis_folder, the_file_name)
+cb_watershed <- readOGR(the_path )
+
+the_file_name <- 'Maine.shp' 
+the_path <- file.path(gis_folder, the_file_name)
+Maine <- readOGR(the_path )
+
+```
+
+# Initial Plots
+
+```{r}
+plt <- ggplot() +
+  geom_polygon(data = cb_geospatial, aes( x = long, y = lat, group = group), fill="#69b3a2", color="white") +
+  geom_polygon(data = cb_watershed, aes( x = long, y = lat, group = group), fill = NA, color="blue") +
+  theme_void() +
+  theme(panel.background = element_rect(fill = 'grey85')) +
+  coord_equal()
+plt
+```
+
+That's a good start, but it would be nice to provide a Maine state background.
+To do that, we need to find the current coordinates and apply them after we add 
+Maine  (which is larger) to the map.
+
+```{r}
+xlims <- layer_scales(plt)$x$range$range
+ylims <- layer_scales(plt)$y$range$range
+```
+
+```{r}
+plt <- ggplot() +
+  geom_polygon(data = Maine, aes( x = long, y = lat, group = group), 
+                fill = 'grey50', color='grey10')  +
+  geom_polygon(data = cb_geospatial, aes( x = long, y = lat, group = group), 
+               fill="#69b3a2", color="white") +
+  geom_polygon(data = cb_watershed, aes( x = long, y = lat, group = group),
+               fill = NA, color="blue") +
+ 
+  theme_void() +
+  theme(panel.background = element_rect(fill = 'grey85')) +
+  coord_equal(xlim = xlims, ylim = ylims)
+plt
+```
+
+# Merge Tablular Data into Calculated Data
+The shapefile object (Technically, a "SpatialPolygonsDataFrame") contains a 
+dataframe in its `@data` slot, but manipulating it directly appears to lead to
+unpredictable behavior. However, `sp` includes a `merge()` method for these S4
+objects, when paired with a dataframe.  This works as one might expect.  
+
+```{r}
+names(cb_geospatial@data)
+```
+```{r}
+tmp <- cb_data %>%
+  select(c('GEOID10', "LIFEEXP":"UNEMPPCT", -LIFEEXP_SE, NEG_LIFEEXP, Index_1:p_Index_2))
+
+```
+
+
+But we run into problems creating a "fortified" data frame for ggplot that 
+contains the identifier we need in the next step to allow us to merge the 
+geospatial data wit hteh tabular data.
+
+```{r error = TRUE} 
+cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
+```
+
+```{r error = TRUE} 
+cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
+```
+
+A little Googling revealed that `maptools` (apparently called by `sp`, which is 
+called by either `sf` or `rgdal`) relies on other packages to handle polygon 
+geometries. Calling either `tidy()` or `fortify()` with a `region` argument
+triggers the effort t ouse one of these add-on packages.
+
+The help files for `maptools::checkPolygonHoles()` provides a bit more detail.
+
+Apparently, `gpclip` has a restrictive license, so you need to formally grant
+permission to `gpclip`. but the  help file says use of the rgeos package 
+functions is prefered.
+
+So, after I installed and load the `rgeos` package, all is well...
+But note the warning about future changes.
+```{r}
+library(rgeos)
+
+cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
+```
+
+```{r}
+cb_geospatial_df <- cb_geospatial_df %>%
+  left_join(tmp, by = c('id' = 'GEOID10'))
+```
+
+
+```{r}
+names(cb_geospatial_df)
+```
+
+# Revised Plot
+```{r}
+plt <- ggplot() +
+  geom_polygon(data = Maine, aes( x = long, y = lat, group = group), 
+                fill = 'grey50', color='grey10')  +
+  geom_polygon(data = cb_geospatial_df, aes( x = long, y = lat, group = group,
+                                          fill = Index_1), color="white") +
+  geom_polygon(data = cb_watershed, aes( x = long, y = lat, group = group),
+               fill = NA, color="blue") +
+  scale_fill_viridis_b(option = 'B') +
+  theme_void() +
+  theme(panel.background = element_rect(fill = 'grey85')) +
+  coord_equal(xlim = xlims, ylim = ylims)
+plt
+```
+
+## Comparisons of Maps
+

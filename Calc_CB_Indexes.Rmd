@@ -160,7 +160,13 @@ names(Region) <- nms       # Add Names
 Region
 ```
 
-## Calculate Thresholds
+```{r}
+thresholds <- bind_rows(National, Maine, Region, .id = 'Scale') %>%
+  mutate(Scale = c('National', 'Maine', 'Region'))
+```
+
+
+## Calculate ThresholdExceedences
 I use a similar functional programming approach for calculating whether specific
 Casco Bay Census Tracts exceed each threshold.  Here I pass both a dataframe
 and a names list or vector containing the thresholds. 
@@ -187,15 +193,8 @@ thresholds.
 threshold_compare(cb_data, Region, "Index_1")
 ```
 
-```{r}
-test <- map(as.list(nms), function(x) threshold_compare(cb_data, Region, x))
-test <- as.data.frame(test)
-test
-```
-
 
 ### Calculations
-
 ```{r}
 National_Exceeds <- map(as.list(nms), 
                         function(x) threshold_compare(cb_data, National, x))
