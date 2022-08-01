@@ -41,6 +41,7 @@ vignettes/*.pdf
 # Overlarge Data Files
 Original_Data/EJSCREEN_Full_tracts.txt
 Original_Data/tract2010_LifeExpectancy.txt
+Original_Data/ACSST5Y2020.S1901_data_with_overlays_2022-05-06T151652.csv
 
 # GIS DAta
 /GIS_Data/Original/

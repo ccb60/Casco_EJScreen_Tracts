@@ -228,18 +228,19 @@ names(cb_geospatial_df)
 ```
 
 # Revised Plot
-With severa lother improvements...
+With several other improvements...
 
 ```{r}
 plt <- ggplot() +
   geom_polygon(data = Maine, aes( x = long, y = lat, group = group), 
-                fill = 'grey50', color='grey10')  +
+                fill = 'grey50',
+               color='grey10')  +
   geom_polygon(data = cb_geospatial_df, aes( x = long, y = lat, group = group,
                                           fill = Index_2), color="white") +
-  geom_path(data = cb_watershed_outline, aes( x = long, y = lat, group = group),
-               fill = NA, color="grey40") +
+  geom_path(data = cb_watershed_outline, aes( x = long, y = lat, group = group), 
+            color="grey40") +
   geom_path(data = Maine, aes( x = long, y = lat, group = group), 
-                fill = 'grey50', color='grey10')  +
+                color='grey10')  +
   scale_fill_viridis_b(option = 'B', na.value = "grey75") +
   theme_void() +
   theme(panel.background = element_rect(fill = 'grey85')) +
@@ -262,7 +263,12 @@ threshold (by definition of the 80th percentile).
 
 ```{r}
 tmp <- cb_data %>% 
-  select(GEOID10, Ex_CB_Index_1:Ex_CB_PCA_Index_V2)
+  select(GEOID10, p_NEG_LIFEEXP:p_UNEMPPCT) %>%
+rename(`Life Expectancy` = p_NEG_LIFEEXP,
+       `Income` = p_LOWINCPCT, 
+       `Education` = p_LESSHSPCT, 
+       `Language` = p_LINGISOPCT, 
+       `Unemployment` = p_UNEMPPCT)
 ```
 
 First, we create a "fortified" tibble, as required for mapping with `ggplot()`.
@@ -272,19 +278,13 @@ cb_geospatial_df <- cb_geospatial_df %>%
   left_join(tmp, by = c('id' = 'GEOID10'))
 ```
 
-Then we simplify the column names.
-```{r}
-cb_geospatial_df_2 <- cb_geospatial_df %>%
-  rename_with(function(x) sub('Ex_CB_', '', x)) 
-```
-
 And finally, pivot the fortified data frame into long format.  Note that this
 creates a **large** data frame which we probably don't want to keep around
 any longer than necessary.
 
 ```{r}
-cb_geospatial_df_2 <- cb_geospatial_df_2 %>%
-  pivot_longer(Index_1:PCA_Index_V2, 
+cb_geospatial_df_2 <- cb_geospatial_df %>%
+  pivot_longer(`Life Expectancy`:`Unemployment`, 
                names_to = 'Threshold', values_to = 'Value')
 ```
 
@@ -298,15 +298,15 @@ plt <- ggplot() +
   geom_polygon(data = Maine, aes( x = long, y = lat, group = group), 
                 fill = 'grey50', color='grey10')  +
   geom_polygon(data = cb_geospatial_df_2, aes( x = long, y = lat, group = group,
-                                          fill = Value), color="white") +
+                                          fill = Value), color="grey60") +
   geom_path(data = cb_watershed_outline, aes( x = long, y = lat, group = group),
-               fill = NA, color="gray40") +
+               color="gray90") +
   geom_path(data = Maine, aes( x = long, y = lat, group = group), 
-                fill = 'grey50', color='grey10')  +
+                color='grey10')  +
   
   facet_wrap(~ Threshold, nrow = 2) +
   
-  scale_fill_viridis_d(option = 'D', na.value = "grey75", name = 'Exceeds') +
+  scale_fill_viridis_b(option = 'B', na.value = "grey75", name = 'Percentiles') +
   theme_void() +
   theme(panel.background = element_rect(fill = 'grey85'),
         legend.position = 'bottom') +
@@ -314,48 +314,6 @@ plt <- ggplot() +
 plt
 ```
 
-What that shows is that thresholds based on indexes constructed by looking at 
-raw scores generally identify more mid-watershed areas, while indexes based 
-on national percentiles tend to identify more locations in Portland and South Portland. This presumably reflects the greater weighting of income in the 
-former, compared to other metrics of disadvantage.
-
-
-# National Percentiles of Indicators
-```{r}
-tmp <- cb_data %>% 
-  select(GEOID10, p_NEG_LIFEEXP:p_UNEMPPCT) %>%
-  mutate(across(p_NEG_LIFEEXP:p_UNEMPPCT, rank, 
-         na.last = TRUE, ties.method = 'average'))
-
-cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
-cb_geospatial_df <- cb_geospatial_df %>%
-  left_join(tmp, by = c('id' = 'GEOID10'))
-
-cb_geospatial_df_2 <- cb_geospatial_df %>%
-  pivot_longer(p_NEG_LIFEEXP:p_UNEMPPCT, 
-               names_to = 'Indicator', values_to = 'Value')
-```
-
-```{r fig.height = 6, fig.width = 8}
-plt <- ggplot() +
-  geom_polygon(data = Maine, aes( x = long, y = lat, group = group), 
-                fill = 'grey50', color='grey10')  +
-  geom_polygon(data = cb_geospatial_df_2, aes( x = long, y = lat, group = group,
-                                          fill = Value), color="white") +
-    geom_path(data = cb_watershed_outline, aes( x = long, y = lat, group = group),
-               fill = NA, color="grey40") +
-  geom_path(data = Maine, aes( x = long, y = lat, group = group), 
-                fill = 'grey50', color='grey10')  +
-  
-  facet_wrap(~ Indicator, nrow = 2) +
-  
-  scale_fill_viridis_b(option = 'B', na.value = "grey75", name = 'Exceeds') +
-  theme_void() +
-  theme(panel.background = element_rect(fill = 'grey85'),
-        legend.position = 'bottom') +
-  coord_equal(xlim = xlims, ylim = ylims)
-plt
-```
 
 ## Zoom in on Portland Region
 ```{r}
@@ -378,28 +336,35 @@ new_ylims <- c(new_y_low, new_y_high)
  plt + 
   coord_equal(xlim = new_xlims, ylim = new_ylims)
 ```
-So, several of these pick up the subsidized housing and homeless community in 
+
+So, several metrics pick up the subsidized housing and homeless community in 
 Portland's Back Cove neighborhood. Other than that, what is striking is the fact
 that the ranks of the different metrics are not all that correlated in this
 smaller sub-region, which may help explain why few locations are flagged by any of
 the candidate indicators.
 
+# Observed Percentiles of Indicators
+Let's look at percentiles within our region. I calculate these by calculating
+ranks, and dividing my the overal lsample size.
 
-
-# Ranks of Indicators
-Let's look at rank ordering within each raw indicators.
 ```{r}
 tmp <- cb_data %>% 
   select(GEOID10, LOWINCPCT:UNEMPPCT, NEG_LIFEEXP) %>%
-  mutate(across(LOWINCPCT:NEG_LIFEEXP, rank, 
-         na.last = TRUE, ties.method = 'average'))
+  mutate(across(LOWINCPCT:NEG_LIFEEXP, function(x) 
+                                       rank(x, na.last = 'keep', 
+                                            ties.method = 'average')/81)) %>%
+rename(`Life Expectancy` = NEG_LIFEEXP,
+       `Income` = LOWINCPCT, 
+       `Education` = LESSHSPCT, 
+       `Language` = LINGISOPCT, 
+       `Unemployment` = UNEMPPCT)
 
 cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
 cb_geospatial_df <- cb_geospatial_df %>%
   left_join(tmp, by = c('id' = 'GEOID10'))
 
 cb_geospatial_df_2 <- cb_geospatial_df %>%
-  pivot_longer(LOWINCPCT:NEG_LIFEEXP, 
+  pivot_longer(`Income`:`Life Expectancy`,
                names_to = 'Indicator', values_to = 'Value')
 ```
 
@@ -408,15 +373,15 @@ plt <- ggplot() +
   geom_polygon(data = Maine, aes( x = long, y = lat, group = group), 
                 fill = 'grey50', color='grey10')  +
   geom_polygon(data = cb_geospatial_df_2, aes( x = long, y = lat, group = group,
-                                          fill = Value), color="white") +
+                                          fill = Value), color='grey60') +
   geom_path(data = cb_watershed_outline, aes( x = long, y = lat, group = group),
-               fill = NA, color="grey40") +
+                color="grey90") +
   geom_path(data = Maine, aes( x = long, y = lat, group = group), 
-                fill = 'grey50', color='grey10')  +
+                color='grey10')  +
   
   facet_wrap(~ Indicator, nrow = 2) +
   
-  scale_fill_viridis_b(option = 'B', na.value = "grey75", name = 'Exceeds') +
+  scale_fill_viridis_b(option = 'B', na.value = "grey75", name = 'Rank') +
   theme_void() +
   theme(panel.background = element_rect(fill = 'grey85'),
         legend.position = 'bottom') +
@@ -425,22 +390,6 @@ plt
 ```
 
 ## Zoom in on Portland Region
-```{r}
-xlims
-ylims
-```
-```{r}
-new_x_low <- xlims[1] + 3* (xlims[2]-xlims[1])/6
-new_x_high <- xlims[1] + 4* (xlims[2]-xlims[1])/6
-
-new_y_low <- ylims[1] +  (ylims[2]-ylims[1])/12
-new_y_high <- ylims[1] + 3*(ylims[2]-ylims[1])/12
-
-new_xlims <- c(new_x_low, new_x_high)
-new_ylims <- c(new_y_low, new_y_high)
-```
-
-
 ```{r}
  plt + 
   coord_equal(xlim = new_xlims, ylim = new_ylims)

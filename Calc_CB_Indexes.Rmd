@@ -115,10 +115,16 @@ cb_data <- cb_data %>%
   inner_join(the_data, by = 'GEOID10')
 ```
 
+# Save Data
+```{r}
+write_csv(cb_data, "cb_tracts_indexes.csv")
+```
+
 # Calculate Thresholds
-WE have six different indexes,a nd we want threshold values for each at 
-National, State, and Casco Bay Region levels.  It's conveinent to automate
-the claculations usinf a small function and the `map()` function.
+We have six different indexes, and we want threshold values for each at 
+National, State, and Casco Bay Region levels.  It's convenient to automate
+the calculations using a small function and the `map()` function.
+
 ```{r}
 (nms <- names(cb_data)[25:30])
 ```
@@ -126,6 +132,7 @@ the claculations usinf a small function and the `map()` function.
 This function calculates the 80th percentile (by default, anyway) of a named
 data column from a data frame.  There is no error checking, so this is NOT
 appropriate for programming with out more work.
+
 ```{r}
 quantile_select_col <- function(.data, .col, .q = 0.8) {
   return(quantile(.data[,.col], .q, na.rm = TRUE))
@@ -136,7 +143,7 @@ the_data %>%
 ```
 ### Calculations
 I calculate a named vector of threshold values at NAtional, State and Casco
-Bay Regiional levels.
+Bay Regional levels.
 
 ```{r}
 National <- map(nms, function(x) quantile_select_col(the_data, x))
@@ -185,15 +192,12 @@ And we can now quickly demonstrate that no Casco Bay census Block exceeds that
 value.
 
 ```{r}
-any(threshold_compare(cb_data, National, "Index_1"), na.rm = TRUE)
+sum(threshold_compare(cb_data, National, "Index_1"), na.rm = TRUE)
 ```
-But at least one sample does exceed the 80th percentile of the regional
-thresholds.
+And not =ne exceed the 80th percentile for Maine either.
 ```{r}
-threshold_compare(cb_data, Region, "Index_1")
+sum(threshold_compare(cb_data, Maine, "Index_1"), na.rm = TRUE)
 ```
-
-
 ### Calculations
 ```{r}
 National_Exceeds <- map(as.list(nms), 
@@ -231,7 +235,5 @@ cb_data <- cb_data %>%
   bind_cols(National_Exceeds, Maine_Exceeds, CB_Exceeds)
 ```
 
-```{r}
-write_csv(cb_data, "cb_tracts_indexes.csv")
-```
-
+I don't save that data, because it is actually easier to manage map colors 
+without the hard thresholds.
