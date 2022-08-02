@@ -105,7 +105,11 @@ the_data <- read_csv(the_path,
                        LOWINCPCT = col_double(),
                        LINGISOPCT = col_double(),
                        LESSHSPCT  = col_double(),
-                       UNEMPPCT = col_double()))
+                       UNEMPPCT = col_double(),
+                       P_LWINCPCT = col_double(),
+                       P_LNGISPCT = col_double(),
+                       P_LESHSPCT  = col_double(),
+                       P_UNEMPPCT = col_double()))
 ```
 
 
@@ -145,7 +149,8 @@ the_data <- inner_join(life_data, the_data, by = c('GEOID10' = 'ID')) %>%
          LESSHSPCT = 100* LESSHSPCT,
          LINGISOPCT =  100* LINGISOPCT,
          UNEMPPCT   = 100* UNEMPPCT) %>%
-  relocate(Perimeter, Area, .after = Area_ha)
+  relocate(Perimeter, Area, .after = Area_ha) %>%
+  relocate(NEG_LIFEEXP, .after = LIFEEXP_SE)
   
 rm(life_data)
 ```
@@ -186,9 +191,9 @@ quite correct, but it will be close.
 ```{r}
 calc_index_2 <- function(.data) {
   index_2 <- with(.data,
-                  (p_NEG_LIFEEXP + p_LOWINCPCT +p_LESSHSPCT +
-                     p_LINGISOPCT +
-                     p_UNEMPPCT) / 5)
+                  (P_NEG_LIFEEXP + P_LWINCPCT + P_LESHSPCT +
+                     P_LNGISPCT +
+                     P_UNEMPPCT) / 5)
   return(index_2)
 }
 ```
@@ -196,21 +201,22 @@ calc_index_2 <- function(.data) {
 # More  Calculations
 ```{r}
 the_data <- the_data %>% 
-  mutate(p_NEG_LIFEEXP = quick_percentile(NEG_LIFEEXP),
-         p_LOWINCPCT   = quick_percentile(LOWINCPCT),
-         p_LESSHSPCT   = quick_percentile(LESSHSPCT),
-         p_LINGISOPCT  = quick_percentile(LINGISOPCT),
-         p_UNEMPPCT    = quick_percentile(UNEMPPCT))
+  mutate(P_NEG_LIFEEXP = quick_percentile(NEG_LIFEEXP) * 100) %>%
+  relocate(P_NEG_LIFEEXP, .before = P_LWINCPCT)
 ```
-
 
 The following depends on having columns with the correct names, and there is
 no error checking....
+
+*  Index_1 is based on averaging the VALUES
+*  Index_2 is based on averaging the PERCENTILES
+*  P_Index_1 records the percentiles of Index 1, and is thus scale-free.
+*  P_Index_2 shows percentiles of Index 2.
 ```{r}
 the_data$Index_1 <- calc_index_1(the_data)
-the_data$Index_2 <- calc_index_2(the_data) * 100
-the_data$p_Index_1 <- quick_percentile(the_data$Index_1)
-the_data$p_Index_2 <- quick_percentile(the_data$Index_2)
+the_data$Index_2 <- calc_index_2(the_data)
+the_data$P_Index_1 <- quick_percentile(the_data$Index_1)
+the_data$P_Index_2 <- quick_percentile(the_data$Index_2)
 ```
 
 # Distributions
@@ -221,7 +227,7 @@ complexity by plotting only a a 5% sample of the data.
 
 ```{r fig.width = 8, fig.height = 8}
 the_data %>%
-  select( "NEG_LIFEEXP", "LOWINCPCT", "LESSHSPCT", "LINGISOPCT","UNEMPPCT" ) %>%
+  select( "LIFEEXP", "LOWINCPCT", "LESSHSPCT", "LINGISOPCT","UNEMPPCT" ) %>%
   slice_sample(prop = 0.05, replace = FALSE) %>%
   ggpairs(progress = FALSE)
 ```
@@ -238,7 +244,7 @@ percentiles instead.
 ## Means, SD, Medians and IGR
 ```{r}
 the_data %>%
-  select( "NEG_LIFEEXP", "LOWINCPCT", "LESSHSPCT", "LINGISOPCT","UNEMPPCT" ) %>%
+  select( "LIFEEXP", "LOWINCPCT", "LESSHSPCT", "LINGISOPCT","UNEMPPCT" ) %>%
   map(quick_sum) %>%
   unlist() %>%
   array(dim = c(4,5),
@@ -252,6 +258,13 @@ index that will emphasize poverty about twice as much as the lack of high school
 education and about four times as much as the other indicators. Moderate to
 high correlations among predictors will affect that somewhat, but the general 
 idea is sound.
+
+```{r fig.width = 8, fig.height = 8}
+the_data %>%
+  select( "P_NEG_LIFEEXP", "P_LWINCPCT", "P_LESHSPCT", "P_LNGISPCT","P_UNEMPPCT" ) %>%
+  slice_sample(prop = 0.02, replace = FALSE) %>%
+  ggpairs(progress = FALSE)
+```
 
 # PCA Analysis of Sub-indexes
 We can get more formal about the relationships between the different sub-indexes
@@ -366,16 +379,17 @@ census Tract.  That is because the standard deviation of the income indicator
 is about double the standard error of the second most variable indicator.
 
 ```{r}
-plot_pca(pca)
+plot_pca(pca, .scale = 3, .ann_space = 1)
 ```
 
 What we see is that the principal structure in the sub-indexes (when unscaled) 
-is correlated with income and somewhat correlated  with education. Linguistic isolation and education provide a fair amount of independent information via
+is correlated with income and somewhat correlated  with education. Linguistic 
+isolation and education provide a fair amount of independent information via
 the second PCA Axis.
 
 ## Scaled PCA
 A scaled PCA first standardizes all variables to unit variance before
-conducting the PCA, thus making sure that changing unbits won't change results.
+conducting the PCA, thus making sure that changing units won't change results.
 
 ```{r}
 pca <- the_data %>%
@@ -390,8 +404,7 @@ summary(pca)
 
 This explains less of the overall variation in the first two PCA axes,
 confirming that some of the apparent pattern in the data was driven by the
-different standard deviations of the predictors. Variables with more variation
-(Percent low Income and percent not finishing high school) dominate the pattern.
+different standard deviations of the predictors.
 
 ```{r}
 pca$rotation
@@ -402,9 +415,9 @@ plot_pca(pca, .scale = 4)
 ```
 
 When variables are standardized to unit variance, the dominant axis is 
-moderately correlated with all the sub-indexes, especially income, education, 
-and unemployment. That suggests a common structure of community vulnerability.  Language and to a lesser extent life expectancy are most heavily loaded on the
-second PCA axis.
+moderately correlated with all the sub-indexes, especially income and education.
+That suggests a common structure of community vulnerability. Language and to a
+lesser extent life expectancy are most heavily loaded on the second PCA axis.
 
 This suggests that an index that is NOT based on scaled values of percentiles 
 will largely function as a surrogate for income, while if the index is based on
@@ -418,10 +431,10 @@ the_data$PCA_Index_V1 <- calc_scores(the_data, pca)
 ## Percentiles
 ```{r}
 pca <- the_data %>%
-  select( "p_NEG_LIFEEXP", "p_LOWINCPCT", "p_LESSHSPCT",
-          "p_LINGISOPCT","p_UNEMPPCT" ) %>%
+  select( "P_NEG_LIFEEXP", "P_LWINCPCT", "P_LESHSPCT",
+          "P_LNGISPCT","P_UNEMPPCT" ) %>%
   filter(complete.cases(.)) %>%
-prcomp(scale. = FALSE)
+prcomp(scale. = TRUE)
 ```
 
 ```{r}
@@ -438,18 +451,16 @@ interesting that pecentile of (negative) life expectancy decreases the
 axis 2 score, while linguistic isolation sharply increases it.
 
 ```{r}
-plot_pca(pca, .scale = 3, .ann_space = 0.05,
-         .levels = c( "p_NEG_LIFEEXP", "p_LOWINCPCT", "p_LESSHSPCT",
-                      "p_LINGISOPCT","p_UNEMPPCT" ))
+plot_pca(pca, .scale = 3, .ann_space = .2,
+         .levels = c(  "P_NEG_LIFEEXP", "P_LWINCPCT", "P_LESHSPCT",
+          "P_LNGISPCT","P_UNEMPPCT" ))
 ```
 
 So, an index based on the (national) percentiles of the scores produces a PCA
 with less structure, as expected.  Here axis 1 is a composite of all the
 sub-indexes, with the strongest association with Schooling, Income and
 Unemployment. Axis 2 is principally linguistic isolation, but also has moderate
-loading for lifespan.
-
-Collectively, the first two PCA axes explain roughly three quarters of the pattern.
+loading for unemployment.
 
 
 ```{r}
@@ -458,8 +469,8 @@ the_data$PCA_Index_V2 <- calc_scores(the_data, pca)
 
 # Examining Results
 ## Correlations
-The Raw indexes are highly correlated with each of the sub-indexes, but especially
-with income.
+The Raw indexes are highly correlated with each of the sub-indexes, but 
+especially with income and education.
 
 ```{r}
 the_data %>%
@@ -487,16 +498,26 @@ select(c(Index_1:PCA_Index_V2)) %>%
   cor(use = 'pairwise', method = 'pearson')  %>%
   round(3)
 ```
-Note that the PCA scores are **negatively** correlated with the other metrics.
-PCA, like most ordinations, is defined only to reflections.
+Note that the PCA Index scores are **negatively** correlated with the other
+metrics. PCA, like most ordinations, is defined only to reflections.  We swap 
+the sign here.
+
+```{r}
+the_data$PCA_Index_V1 <- -the_data$PCA_Index_V1
+the_data$PCA_Index_V2 <- -the_data$PCA_Index_V2
+```
 
 Rank correlations are even higher.
 ```{r}
 the_data %>%
-select(c(Index_1, Index_2, PCA_Index_V1, PCA_Index_V2)) %>%
+select(c(Index_1, Index_2, P_Index_1, P_Index_2,  PCA_Index_V1, PCA_Index_V2)) %>%
   cor(use = 'pairwise', method = 'spearman')  %>%
   round(3)
 ```
+
+So, the raw index and the PCA indexes based on the same measurements are highly
+correlated, as one might expect. one is a simple average, the other a weighted 
+average of the same five basic metrics.
 
 ## Graphics
 I plot only 5% of the data, to reduce the size of the PDF file....
@@ -513,38 +534,40 @@ plt <- the_data %>%
   geom_vline(xintercept = p80_sum, color = 'blue') +
   geom_hline(yintercept = p80_sum_of_p, color = 'blue') +
 
-  xlab( 'Sum of Values') +
-  ylab( 'Sum of Percentiles') +
+  xlab( 'Mean of Values') +
+  ylab( 'Mean of Percentiles') +
   ggtitle('Comparison of Candidate Indexes')
 plt
 ```
 
 The relationship between the indexes is not linear, but correlations 
-are likely to be high over any finite range.  unfortunately, the correlations 
+are likely to be high over any finite range.  Unfortunately, the correlations 
 appear less robust at higher index values, exactly where we may want the most
-precision. The Blue lines represent the 80th percentiles in each axis.
+precision. The Blue lines represent the 80th percentiles in each axis.  Note
+that the 80th percentile of the mean of five percentiles lies well below 80.
 
-The relationship between the percentiles of close to linear, but each index is
+The relationship between the percentiles are close to linear, but each index is
 much closer -- although not identical.
 
 ```{r}
-p80_sum <- quantile(the_data$p_Index_1, 0.8, na.rm = TRUE)
-p80_sum_of_p  <- quantile(the_data$p_Index_2, 0.8, na.rm = TRUE)
+p80_sum <- quantile(the_data$P_Index_1, 0.8, na.rm = TRUE)
+p80_sum_of_p  <- quantile(the_data$P_Index_2, 0.8, na.rm = TRUE)
 
 plt <- the_data %>%
   slice_sample(prop = 0.1) %>%
-  ggplot(aes(p_Index_1, p_Index_2)) +
+  ggplot(aes(P_Index_1, P_Index_2)) +
   geom_point(alpha = 0.1, shape = 21) +
   geom_density_2d(color = 'green') +
   geom_vline(xintercept = p80_sum, color = 'blue') +
   geom_hline(yintercept = p80_sum_of_p, color = 'blue') +
-  xlab( 'Percentiles of Sum of Values') +
-  ylab( 'Percentiles of Sum of Percentiles') +
+  xlab( 'Percentiles of Mean of Values') +
+  ylab( 'Percentiles of Mean of Percentiles') +
   ggtitle('Comparison of Percentiles of\nCandidate Indexes') +
   coord_fixed()
 plt
 ```
 
+Here the percentiles DO fall 
 
 ## Pairs Plot of All Indexes
 Again, I reduce plot complexity by plotting only 5% of the data.
@@ -571,6 +594,8 @@ index so as to make little practical difference. There is probably no reason to
 continue to consider the PCA based metrics (and if there were, I'd want to 
 explore data transformations).
 
+
+# Output Results
 ```{r}
 write_csv(the_data, 'National_Draft_Indexes.csv')
 ```
