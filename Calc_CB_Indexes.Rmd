@@ -98,8 +98,8 @@ the_file <- "Casco_Tracts.txt"
 the_path <- file.path(data_folder, the_file)
 
 cb_data <- read_csv(the_path, n_max = 81,
-                    col_types = c(paste(c(rep('-',2),  rep('c',2),  rep('d',2),
-                                          rep('-',6), 'd'), collapse = '')))
+                    col_types = c(paste(c(rep('-',2),  'c-',  rep('d',2),
+                                          rep('-',7), 'd'), collapse = '')))
 
 the_file <- "National_Draft_Indexes.csv"
 the_data <- read_csv(the_file,
