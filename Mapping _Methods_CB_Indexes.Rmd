@@ -44,9 +44,14 @@ five demographic indicators:
 
 *  Low life expectancy.
 
-This notebook builds on the work in "Calc_Indexes.pdf" to calculate data for the
-Casco Bay Watershed Census Tracts, and calculates how Casco Bay Census tracts
-compare at National, Statewide, and Regional scales.
+This notebook explores simple methods for mapping census data for the Casco Bay 
+watershed, principally using `rgdal` and `sf`.  The approach from `sf` is faster
+and slightly easier to use.  In both cases, this notebook emphasizes using 
+`ggplot2` as the graphic backend, simply because that allows me to capitalize
+on prior experience with `ggplot2`.
+
+Other mapping solutions for R exist, but each requires a slightly different way 
+of thinking about data organization and map structure, so they are not explored here.
 
 # Load Libraries
 ```{r libraries}
@@ -55,7 +60,7 @@ library(GGally)
 library(readr)
 library(rgdal)
 library(sf)   # automatically loads `sp` and `rgdal`
-library(broom)  # used to tidy geospatial info to dataframe for ggplot (could use fortify())
+#library(broom)  # used to tidy geospatial info to dataframe for ggplot (could use fortify())
 #library(rgeos)
 ```
 
@@ -64,7 +69,7 @@ This sets `ggplot()`graphics for no background, no grid lines, etc. in a clean
 format suitable for (some) publications.
 
 ```{r set_theme}
-theme_set(theme_classic())
+theme_set(theme_void())
 ```
 
 # Load Data
@@ -99,7 +104,7 @@ names, which are more convenient that the GEOID10 values to search.
 
 ```{r}
 cb_data <- read_csv("cb_tracts_indexes.csv",    
-                     col_types = paste0('ccddd--', rep('d', 41)))
+                     col_types = paste0('cdd--', rep('d', 23)))
 ```
 
 ## Geospatial Data
@@ -110,9 +115,9 @@ the_file_name <- 'casco_ejscreen_utm.shp'
 the_path <- file.path(gis_folder, the_file_name)
 cb_geospatial <- readOGR(the_path )
 
-the_file_name <- 'casco_watershed_utm.shp' 
-the_path <- file.path(gis_folder, the_file_name)
-cb_watershed <- readOGR(the_path )
+# the_file_name <- 'casco_watershed_utm.shp' 
+# the_path <- file.path(gis_folder, the_file_name)
+# cb_watershed <- readOGR(the_path )
 
 the_file_name <- 'watershed_outline.shp' 
 the_path <- file.path(gis_folder, the_file_name)
@@ -145,7 +150,7 @@ plt
 
 That's a good start, but it would be nice to provide a Maine state background.
 To do that, we need to find the current coordinates and apply them after we add 
-Maine  (which is larger) to the map.
+Maine (which is larger) to the map.
 
 ```{r}
 xlims <- layer_scales(plt)$x$range$range
@@ -178,47 +183,14 @@ information without requiring access to the slot directly.)
 ```{r}
 names(cb_geospatial@data)
 ```
+
 ```{r}
 tmp <- cb_data %>%
-  select(c('GEOID10', "LIFEEXP":"UNEMPPCT", -LIFEEXP_SE, NEG_LIFEEXP, Index_1:p_Index_2))
+  select(c(GEOID10, LIFEEXP:UNEMPPCT, -LIFEEXP_SE, 
+           NEG_LIFEEXP, Index_1:PCA_Index_V2))
 
-```
+cb_geospatial_df <- fortify(cb_geospatial, region = "GEOID10")
 
-But we run into problems creating a "fortified" data frame for ggplot that 
-contains the identifier we need in the next step to allow us to merge the 
-geospatial data with the tabular data.
-
-```{r error = TRUE} 
-cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
-```
-
-```{r error = TRUE} 
-cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
-```
-
-A little Googling revealed that `maptools` (apparently called by `sp`, which is 
-called by either `sf` or `rgdal`) relies on other packages to handle polygon 
-geometries. Calling either `tidy()` or `fortify()` on a polygon map layer
-with a `region` argument triggers calls to functions from one of these other
-packages.
-
-The help files for `maptools::checkPolygonHoles()` provides a bit more detail.
-
-Apparently, `gpclip` has a restrictive license, so you need to formally grant
-permission to `gpclip`. but the  help file says use of the `rgeos` package 
-functions is preferred.
-
-So, after I installed and loaded the `rgeos` package, all is well...
-But note the warning about future changes. Since I have never called any `rgeos`
-functions directly, I'm not sure how we will need to change code in the future. 
-
-```{r}
-library(rgeos)
-
-cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
-```
-
-```{r}
 cb_geospatial_df <- cb_geospatial_df %>%
   left_join(tmp, by = c('id' = 'GEOID10'))
 ```
@@ -263,17 +235,18 @@ threshold (by definition of the 80th percentile).
 
 ```{r}
 tmp <- cb_data %>% 
-  select(GEOID10, p_NEG_LIFEEXP:p_UNEMPPCT) %>%
-rename(`Life Expectancy` = p_NEG_LIFEEXP,
-       `Income` = p_LOWINCPCT, 
-       `Education` = p_LESSHSPCT, 
-       `Language` = p_LINGISOPCT, 
-       `Unemployment` = p_UNEMPPCT)
+  select(GEOID10, P_NEG_LIFEEXP:P_UNEMPPCT) %>%
+rename(`Life Expectancy` = P_NEG_LIFEEXP,
+       `Income` = P_LWINCPCT, 
+       `Education` = P_LESHSPCT, 
+       `Language` = P_LNGISPCT, 
+       `Unemployment` = P_UNEMPPCT)
 ```
 
 First, we create a "fortified" tibble, as required for mapping with `ggplot()`.
+
 ```{r}
-cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
+cb_geospatial_df <- fortify(cb_geospatial, region = "GEOID10")
 cb_geospatial_df <- cb_geospatial_df %>%
   left_join(tmp, by = c('id' = 'GEOID10'))
 ```
@@ -288,10 +261,11 @@ cb_geospatial_df_2 <- cb_geospatial_df %>%
                names_to = 'Threshold', values_to = 'Value')
 ```
 
-
 ## Facet Plot Demo
 This ggplot object is fairly complex, so it takes some time to render.
 Rendering time can be shortened somewhat by using simpler polygon geometries.
+
+How does the following code know where to find "Threshold?
 
 ```{r fig.height = 5, fig.width = 7}
 plt <- ggplot() +
@@ -314,89 +288,104 @@ plt <- ggplot() +
 plt
 ```
 
-
 ## Zoom in on Portland Region
 ```{r}
 xlims
 ylims
 ```
+
 ```{r}
-new_x_low <- xlims[1] + 3* (xlims[2]-xlims[1])/6
-new_x_high <- xlims[1] + 4* (xlims[2]-xlims[1])/6
+new_x_low  <- xlims[1] + 13 * (xlims[2]-xlims[1])/24
+new_x_high <- xlims[1] + 15 * (xlims[2]-xlims[1])/24
 
-new_y_low <- ylims[1] +  (ylims[2]-ylims[1])/12
-new_y_high <- ylims[1] + 3*(ylims[2]-ylims[1])/12
+new_y_low  <- ylims[1] + 5 * (ylims[2]-ylims[1])/44
+new_y_high <- ylims[1] + 9 *(ylims[2]-ylims[1])/48
 
-new_xlims <- c(new_x_low, new_x_high)
-new_ylims <- c(new_y_low, new_y_high)
+new_xlims  <- c(new_x_low, new_x_high)
+new_ylims  <- c(new_y_low, new_y_high)
 ```
-
 
 ```{r}
  plt + 
-  coord_equal(xlim = new_xlims, ylim = new_ylims)
+  coord_equal(xlim = new_xlims, ylim = new_ylims) +
+  geom_path(data = Maine, aes( x = long, y = lat, group = group), 
+                color='grey80')
 ```
 
 So, several metrics pick up the subsidized housing and homeless community in 
 Portland's Back Cove neighborhood. Other than that, what is striking is the fact
 that the ranks of the different metrics are not all that correlated in this
-smaller sub-region, which may help explain why few locations are flagged by any of
-the candidate indicators.
+smaller sub-region, which may help explain why few locations are flagged by
+the summary indicators.
 
-# Observed Percentiles of Indicators
-Let's look at percentiles within our region. I calculate these by calculating
-ranks, and dividing my the overal lsample size.
+# An Alternative Aproach
+The `sf` and `ggplot2` packages play nicely together, but for that you work with
+`sf` objects, not `SpatialPolygonDataFrame` objects from `rgdal`.  This approach 
+appears to render a bit faster.
+
+## Test `st_read()`
+```{r}
+
+the_file_name <- 'casco_ejscreen_utm.shp' 
+the_path <- file.path(gis_folder, the_file_name)
+cb_geospatial_sf <- st_read(the_path )
+
+the_file_name <- 'watershed_outline.shp' 
+the_path <- file.path(gis_folder, the_file_name)
+cb_watershed_outline_sf <- st_read(the_path )
+
+the_file_name <- 'Maine.shp' 
+the_path <- file.path(gis_folder, the_file_name)
+Maine_sf <- st_read(the_path )
+```
 
 ```{r}
-tmp <- cb_data %>% 
-  select(GEOID10, LOWINCPCT:UNEMPPCT, NEG_LIFEEXP) %>%
-  mutate(across(LOWINCPCT:NEG_LIFEEXP, function(x) 
-                                       rank(x, na.last = 'keep', 
-                                            ties.method = 'average')/81)) %>%
-rename(`Life Expectancy` = NEG_LIFEEXP,
-       `Income` = LOWINCPCT, 
-       `Education` = LESSHSPCT, 
-       `Language` = LINGISOPCT, 
-       `Unemployment` = UNEMPPCT)
 
-cb_geospatial_df <- tidy(cb_geospatial, region = "GEOID10")
-cb_geospatial_df <- cb_geospatial_df %>%
-  left_join(tmp, by = c('id' = 'GEOID10'))
+tmp <- merge(cb_geospatial_sf, cb_data, by = 'GEOID10')
 
-cb_geospatial_df_2 <- cb_geospatial_df %>%
-  pivot_longer(`Income`:`Life Expectancy`,
-               names_to = 'Indicator', values_to = 'Value')
+tmp_data <-  cb_data %>%
+   select(GEOID10, P_NEG_LIFEEXP:P_UNEMPPCT) %>%
+   rename(`Life Expectancy` = P_NEG_LIFEEXP,
+       `Income` = P_LWINCPCT, 
+       `Education` = P_LESHSPCT, 
+       `Language` = P_LNGISPCT, 
+       `Unemployment` = P_UNEMPPCT)
+
+tmp_2 <- merge(cb_geospatial_sf, tmp_data, by = 'GEOID10') %>%
+  pivot_longer(`Life Expectancy`:`Unemployment`, 
+               names_to = 'Threshold', values_to = 'Value')
+
 ```
 
-```{r fig.height = 6, fig.width = 8}
-plt <- ggplot() +
-  geom_polygon(data = Maine, aes( x = long, y = lat, group = group), 
-                fill = 'grey50', color='grey10')  +
-  geom_polygon(data = cb_geospatial_df_2, aes( x = long, y = lat, group = group,
-                                          fill = Value), color='grey60') +
-  geom_path(data = cb_watershed_outline, aes( x = long, y = lat, group = group),
-                color="grey90") +
-  geom_path(data = Maine, aes( x = long, y = lat, group = group), 
-                color='grey10')  +
-  
-  facet_wrap(~ Indicator, nrow = 2) +
-  
-  scale_fill_viridis_b(option = 'B', na.value = "grey75", name = 'Rank') +
-  theme_void() +
-  theme(panel.background = element_rect(fill = 'grey85'),
-        legend.position = 'bottom') +
-  coord_equal(xlim = xlims, ylim = ylims)
-plt
-```
-
-## Zoom in on Portland Region
 ```{r}
- plt + 
-  coord_equal(xlim = new_xlims, ylim = new_ylims)
+
+ggplot() +
+  geom_sf(data = Maine_sf) +
+  geom_sf(data = tmp, mapping = aes(fill = Index_2)) +
+  geom_sf(data = cb_watershed_outline_sf, color = 'red') +
+  coord_sf(xlim = xlims, ylim = ylims)
 ```
 
-So, several of these pick up the subsidized housing and homeless community in 
-Portland's Back Cove neighborhood. Other than that, what is striking is the fact
-that the ranks of the different metrics are not all that correlated in this
-smaller sub-region, which may help explain why few locations are flagged by any of
-the candidate indicators.
+```{r fig.width = 7, fig.height = 5}
+
+plt_2 <- ggplot() +
+  geom_sf(data = Maine_sf) +
+  geom_sf(data = tmp_2, mapping = aes(fill = Value)) +
+  geom_sf(data = cb_watershed_outline_sf, color = 'red') +
+  geom_sf(data = Maine_sf, fill = NA, color = 'red4') +
+  coord_sf(xlim = xlims, ylim = ylims) +
+
+  facet_wrap(~Threshold) +
+   theme(strip.text.x = element_text(margin = margin(0,0,0.1,0, "cm")),
+         panel.border = element_rect(fill = NA)) +
+  ggtitle('National Percentiles of Demographic Metrics')
+plt_2
+```
+
+```{r}
+ plt_2 + 
+  coord_sf(xlim = new_xlims, ylim = new_ylims)
+```
+
+Note the missing data on life expectancy.
+
