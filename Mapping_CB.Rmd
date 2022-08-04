@@ -163,7 +163,7 @@ names(cb_geospatial_2)
 # Revised Plot
 With several other improvements...
 
-```{r}
+```{r fig.width = 3, fig.height = 3}
 plt <- ggplot() +
   geom_sf(data = Maine,  
                 fill = 'grey50',
@@ -179,6 +179,13 @@ plt <- ggplot() +
   theme(panel.background = element_rect(fill = 'grey85')) +
   coord_sf(xlim = xlims, ylim = ylims)
 plt
+```
+
+```{r}
+ggsave('figures/vulnerability_index.png', type='cairo',
+         width = 3, height = 3)
+ggsave('figures/vulnerability_index.pdf', device = cairo_pdf, 
+       width = 3, height = 3)
 ```
 
 # Creating A Faceted Map Display
@@ -227,7 +234,8 @@ plt <- ggplot() +
 
 plt +
   geom_sf(data = cb_watershed, fill = NA,
-               color="white")
+               color="white") +
+  coord_sf(xlim = xlims, ylim = ylims)
 ```
 
 ```{r}
