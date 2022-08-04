@@ -1,0 +1,140 @@
+---
+title: "Calculating Composite Demographic Indexes"
+uthor: "Curtis C. Bohlen, Casco Bay Estuary Partnership"
+date: "July 27, 2022"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+---
+
+<img
+    src="https://www.cascobayestuary.org/wp-content/uploads/2014/04/logo_sm.jpg"
+    style="position:absolute;top:100px;right:50px;" />
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.align = 'center',
+                      fig.width = 5, fig.height = 4,
+                      collapse = TRUE, comment = "#>")
+```
+
+# Introduction
+CBEP, like other National Estuary Programs will receive additional funding to
+support our programs via the "Bipartisan Infrastructure Law" signed into law 
+last December.
+
+EPA has recently released guidance for applying for those funds.  A core 
+component of the guidance is that overall, the NEP program should comply with 
+the White House's "Justice 40" initiative, which requires that "at least 40% of 
+the benefits and investments from BIL funding flow to disadvantaged 
+communities."
+
+EPA suggested that we use the National-scale 
+[EJSCREEN tools](https://www.epa.gov/ejscreen) to help identify "disadvantaged
+communities" in our region. The EPA guidance goes on to suggest we focus on 
+five demographic indicators:
+
+*  Percent low-income;  
+
+*  Percent linguistically isolated; 
+
+*  Percent less than high school education;  
+
+*  Percent unemployed; and  
+
+*  Low life expectancy.
+
+This notebook examines the distributions of EPA's suggested demographic
+indicators in the Casco Bay Region.
+
+# Load Libraries
+```{r libraries}
+library(tidyverse)
+library(GGally)
+library(readr)
+```
+
+# Set Graphics Theme
+This sets `ggplot()`graphics for no background, no grid lines, etc. in a clean
+format suitable for (some) publications.
+
+```{r set_theme}
+theme_set(theme_classic())
+```
+
+# Load Data
+```{r folder_refs}
+data_folder <- "Original_Data"
+gis_folder <- "GIS_Data"
+dir.create(file.path(getwd(), 'figures'), showWarnings = FALSE)
+```
+
+```{r}
+cb_indexes <- read_csv("cb_tracts_indexes.csv",    
+                     col_types = paste0('cdd--', rep('d', 23)))
+```
+
+# Metrics
+## Summaries
+```{r}
+summary(cb_indexes[,4:10])
+```
+
+Note that more than 50% of our census tracts report no linguistic isolation. In
+our region, this is a surrogate largely for immigrants in Portland.
+
+## Pairs Plot
+```{r fig.width = 6, fig.height = 6}
+cb_indexes %>%
+  select( "NEG_LIFEEXP", "LOWINCPCT", "LESSHSPCT", "LINGISOPCT","UNEMPPCT" ) %>%
+  ggpairs(progress = FALSE)
+```
+
+Data (except life expectancy) is not normally distributed, especially for those
+metrics that have mostly low values. That is not unexpected for percents.
+which are bounded below by zero, and are a transformation of count data.
+
+Adding or averaging raw values will lead to  indexes dominated by the
+sub-indexes with the largest variance.
+
+# National Percentiles
+## Summaries
+```{r}
+summary(cb_indexes[,11:15]) 
+```
+
+## Pairs Plot
+```{r fig.width = 6, fig.height = 6}
+cb_indexes %>%
+  select( c(P_NEG_LIFEEXP:P_UNEMPPCT)) %>%
+  ggpairs(progress = FALSE)
+```
+
+
+# Indexes
+## Summaries
+As a reminder:
+
+*  Index 1 is a mean of the raw scores
+
+*  index 2 is a mean of national percentiles.(This may be what EPA wants)
+
+*  P_Index_1 is national percentiles of Index 1
+
+*  p_Index_2 is national percentile of index 2
+
+*  PCA_Index_V1 is the first PCA axis of a (scaed) PCA on raw scores
+
+*  PCA_Index_V2 is the first PCA Axis of a (Scaeld)PCA on national percentiles.
+
+```{r}
+summary(cb_indexes[,21:26])
+```
+
+## Pairs Plot
+```{r fig.width = 6, fig.height = 6}
+cb_indexes %>%
+  select( Index_1:PCA_Index_V2) %>%
+  ggpairs(progress = FALSE)
+```
+
