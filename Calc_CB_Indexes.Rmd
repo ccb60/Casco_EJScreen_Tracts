@@ -105,9 +105,7 @@ the_file <- "National_Draft_Indexes.csv"
 the_data <- read_csv(the_file,
                      n_max = 74001,
                      col_types = c(rep(col_character(),3), 
-                                   rep(col_double(), 23))) %>%
-  mutate(PCA_Index_V1 = -PCA_Index_V1,
-         PCA_Index_V2 = -PCA_Index_V2)
+                                   rep(col_double(), 23)))
 ```
 
 ```{r}
@@ -126,7 +124,7 @@ National, State, and Casco Bay Region levels.  It's convenient to automate
 the calculations using a small function and the `map()` function.
 
 ```{r}
-(nms <- names(cb_data)[25:30])
+(nms <- names(cb_data)[23:28])
 ```
 ### Utility Function
 This function calculates the 80th percentile (by default, anyway) of a named
